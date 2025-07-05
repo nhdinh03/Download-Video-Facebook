@@ -39,28 +39,41 @@ public class VideoController {
     public ResponseEntity<String> previewVideo(@RequestBody Map<String, String> payload) throws IOException, InterruptedException {
         String fbUrl = payload.get("url");
         ProcessBuilder pb = new ProcessBuilder("yt-dlp", "-f", "best", "-g", fbUrl);
-        pb.redirectErrorStream(true);
+        pb.redirectErrorStream(false);
         Process process = null;
         String directUrl = "";
+        String errorMsg = "";
         int exitCode = -1;
         try {
             process = pb.start();
+            // Đọc output (stdout)
             try (java.io.InputStream is = process.getInputStream()) {
                 directUrl = new String(is.readAllBytes()).trim();
             }
+            // Đọc error (stderr)
+            try (java.io.InputStream es = process.getErrorStream()) {
+                errorMsg = new String(es.readAllBytes()).trim();
+            }
             exitCode = process.waitFor();
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); // re-interrupt thread
+            Thread.currentThread().interrupt();
             return ResponseEntity.status(500).body("Quá trình lấy link video bị gián đoạn: " + e.getMessage());
         } catch (Exception ex) {
+            ex.printStackTrace();
             return ResponseEntity.status(500).body("Lỗi hệ thống: " + ex.getMessage());
         } finally {
             if (process != null) process.destroyForcibly();
         }
-        if (exitCode == 0 && directUrl.startsWith("http")) {
-            return ResponseEntity.ok(directUrl);
-        } else {
-            return ResponseEntity.status(500).body("Không lấy được link video trực tiếp. Mã thoát: " + exitCode + ", output: " + directUrl);
+        if (exitCode != 0 || !directUrl.startsWith("http")) {
+            StringBuilder debugInfo = new StringBuilder();
+            debugInfo.append("Không lấy được link video trực tiếp.\n");
+            debugInfo.append("Mã thoát: ").append(exitCode).append("\n");
+            debugInfo.append("Output: ").append(directUrl).append("\n");
+            debugInfo.append("Error: ").append(errorMsg).append("\n");
+            debugInfo.append("PATH: ").append(System.getenv("PATH")).append("\n");
+            debugInfo.append("Command: yt-dlp -f best -g ").append(fbUrl).append("\n");
+            return ResponseEntity.status(500).body(debugInfo.toString());
         }
+        return ResponseEntity.ok(directUrl);
     }
 }

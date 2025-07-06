@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "Application",
+            "request": "launch",
+            "mainClass": "Facebook.example.com.facebook.Application",
+            "projectName": "Facebook"
+        },
+        {
+            "type": "java",
             "name": "Spring Boot-FacebookApplication<Facebook>",
             "request": "launch",
             "cwd": "${workspaceFolder}",

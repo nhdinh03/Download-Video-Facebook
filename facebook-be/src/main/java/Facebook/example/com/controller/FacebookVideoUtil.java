@@ -1,36 +1,47 @@
 package Facebook.example.com.controller;
+
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.UUID;
+import java.util.function.Consumer;
 
 public class FacebookVideoUtil {
-    public static String downloadVideoUsingYtDlp(String fbUrl) throws IOException, InterruptedException {
-        String outputPath = System.getProperty("java.io.tmpdir") + "/" + java.util.UUID.randomUUID() + ".mp4";
-        ProcessBuilder pb = new ProcessBuilder("yt-dlp", "-f", "best", "-o", outputPath, fbUrl);
+
+    public static String downloadVideoUsingYtDlp(String fbUrl, Consumer<String> progressCallback) throws IOException {
+        String outputPath = System.getProperty("java.io.tmpdir") + File.separator + UUID.randomUUID() + ".mp4";
+
+        ProcessBuilder pb = new ProcessBuilder(
+                "yt-dlp", "--newline", "-f", "best", "-o", outputPath, fbUrl
+        );
         pb.redirectErrorStream(true);
-        Process process = null;
-        int exitCode = -1;
-        StringBuilder output = new StringBuilder();
-        try {
-            process = pb.start();
-            try (java.io.InputStream is = process.getInputStream()) {
-                int b;
-                while ((b = is.read()) != -1) {
-                    output.append((char) b);
+
+        Process process = pb.start();
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("[yt-dlp] " + line);
+                if (progressCallback != null && line.matches(".*?(\\d{1,3})\\.\\d+%.*")) {
+                    String percent = line.replaceAll(".*?(\\d{1,3})\\.\\d+%.*", "$1");
+                    progressCallback.accept("PROGRESS_" + percent);
                 }
             }
-            exitCode = process.waitFor();
-        } finally {
-            if (process != null) process.destroyForcibly();
+        } catch (Exception e) {
+            throw new IOException("Download failed: " + e.getMessage(), e);
         }
-        if (exitCode == 0) {
-            return outputPath;
-        } else {
-            StringBuilder debugInfo = new StringBuilder();
-            debugInfo.append("yt-dlp failed.\n");
-            debugInfo.append("Mã thoát: ").append(exitCode).append("\n");
-            debugInfo.append("Output: ").append(output.toString()).append("\n");
-            debugInfo.append("PATH: ").append(System.getenv("PATH")).append("\n");
-            debugInfo.append("Command: yt-dlp -f best -o ").append(outputPath).append(" ").append(fbUrl).append("\n");
-            throw new RuntimeException(debugInfo.toString());
+
+        try {
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IOException("yt-dlp exited with code " + exitCode);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted", e);
         }
+
+        return outputPath;
     }
 }
